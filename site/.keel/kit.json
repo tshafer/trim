@@ -1,0 +1,24 @@
+{
+  "preset": "minimal",
+  "version": "0.86.0",
+  "files": {
+    ".env.example": "5a8524a4fd241689fd5c6b159a37e53c3fc4c56d79c7a17c0c860783775558a1",
+    "app/Controllers/HomeController.ts": "95eaa7201c11214c045e13f131efdfe26e1e2416c38ebd67908ac6e92925ce9d",
+    "app/Http/Kernel.ts": "7274e2b9e3b4fef7f60925495e6ffc21666b70a86199563c0ba6fbbb4239e1e3",
+    "app/Http/Middleware/requestLogger.ts": "90c5c3a2d35ab8c21edd4840bec58d08f826b219b2a0d4616d33c49f84105e1e",
+    "app/Providers/AppServiceProvider.ts": "8fba5163f9c24ec1ed0ecc40d7df67288c91e20c12060ddee385bc09c30d24f0",
+    "bin/keel.ts": "10584596326fd31f4a0d0ea5bbc84d6e5e75f1e339f0f09c54c0af826a890b24",
+    "bootstrap/app.ts": "b1ae9f32cabbeff786d6efef23bbc0aef8cf278eaeb984d134aec78c98e1f3eb",
+    "bootstrap/providers.ts": "bc02123ed2ef92d94fffd60c9158fca5fb342c2d320a076a6968c4f0733c556a",
+    "config/app.ts": "5b4f06cbcda720ad7aee820773b2abbbe7b5c32b44ad6ee32709fccfde23290d",
+    "package.json": "18e278f1de48902922e5642fc3840b329242a60999cd4c2ce396b3074c49dd6a",
+    "public/.gitkeep": "7b984a452b5a713398d024aeaad811a3f6a26851626394ff56aa58906ee27f35",
+    "resources/css/app.css": "6d1699f73e06d98ae3fe4ac99b6f8cc7304e47332a5bd4ed5383af2109bed958",
+    "resources/views/layout.tsx": "b1c0553acecb1c708b6e11a67bb07b6950c93985e7f57caaa9481d319a4bc624",
+    "resources/views/welcome.tsx": "70799ab61aee0d417a8f7a4e7370dd9f84c0daed0843cd921f727317b037c001",
+    "routes/web.ts": "651ccc99157996eeae9695faf8d162f3a3503fbd973142e5b81c51dc20627605",
+    "tsconfig.json": "51763c4bd4ea3cccd47a683ca50012414a169d8f6e13c33ae141c0651bc24572",
+    "worker.ts": "cc4959c06d6ef6309685bc9495302f5bda78aa7d9b21bed6d5844a4b76d87439",
+    "wrangler.jsonc": "d02b6f9f33823564d507be4ca52e59547f300699b55b9d1d6272ed0d81808e57"
+  }
+}

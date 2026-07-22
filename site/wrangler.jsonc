@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trim-site",
+  "main": "worker.ts",
+  "compatibility_date": "2026-07-01",
+  // AsyncLocalStorage — Keel carries the request context in it.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": { "directory": "./public" },
+
+  // trim.shafer.llc. Cloudflare creates the DNS record on deploy, so the zone
+  // has to already be in this account.
+  "routes": [{ "pattern": "trim.shafer.llc", "custom_domain": true }],
+
+  // Keeps trim-site.<subdomain>.workers.dev live as a fallback while the
+  // custom domain's DNS record settles.
+  "workers_dev": true,
+
+  "observability": { "enabled": true }
+}

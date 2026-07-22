@@ -1,0 +1,15 @@
+@import "@shaferllc/keel/ui/css";
+@import "tailwindcss";
+
+/**
+ * The kit's columns are sized for app screens — .keel-hero-inner is 36rem and
+ * flush left, .keel-shell is 42rem. A marketing page wants one wider measure.
+ *
+ * This lives here rather than as Tailwind utilities on the elements because
+ * components.css is unlayered, so it beats @layer utilities regardless of
+ * import order.
+ */
+.site-column {
+  margin-inline: auto;
+  max-width: 56rem;
+}
