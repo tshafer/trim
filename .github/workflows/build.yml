@@ -1,0 +1,14 @@
+name: Build
+
+# Every push and PR: make sure the package still compiles on a clean machine.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build -c release
