@@ -19,7 +19,7 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 640, minHeight: 480)
+        .frame(minWidth: 720, minHeight: 520)
         .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers)
         }
@@ -127,6 +127,15 @@ struct BatchSidebar: View {
                 }
                 .padding(.vertical, 2)
                 .tag(item.id)
+                .contextMenu {
+                    Button("Remove") { state.remove(item) }
+                    if item.sourceURL != nil {
+                        Button("Reveal in Finder") {
+                            state.selectedID = item.id
+                            state.revealSelectedSource()
+                        }
+                    }
+                }
             }
         }
         .frame(width: 220)
@@ -137,11 +146,10 @@ struct BatchSidebar: View {
         switch item.analysis {
         case .pending:
             return "\(w) × \(h) — scanning…"
-        case .done(nil):
-            return "\(w) × \(h) — all background"
-        case .done(.some):
-            if let crop = state.paddedCropRect(for: item) {
-                return "\(w) × \(h) → \(Int(crop.width)) × \(Int(crop.height))"
+        case .done(let result):
+            guard result.rect != nil else { return "\(w) × \(h) — all background" }
+            if let out = state.outputSize(for: item) {
+                return "\(w) × \(h) → \(out.width) × \(out.height)"
             }
             return "\(w) × \(h)"
         }
@@ -207,11 +215,49 @@ struct PreviewView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             .contentShape(Rectangle())
-            .onDrag {
-                state.dragProvider(for: item) ?? NSItemProvider()
+            .modifier(PreviewInteraction(
+                item: item, imageFrame: imageFrame, scale: scale))
+        }
+        .overlay(alignment: .top) {
+            if state.isPickingColor {
+                Text("Click a background pixel to sample it  ·  esc to cancel")
+                    .font(.callout)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.top, 6)
             }
         }
-        .help("Drag out to export the trimmed image")
+        .help(state.isPickingColor
+              ? "Click to sample the background color"
+              : "Drag out to export the trimmed image")
+    }
+}
+
+/// Click-to-eyedrop while picking; drag-out-to-export otherwise.
+private struct PreviewInteraction: ViewModifier {
+    @EnvironmentObject private var state: AppState
+    let item: TrimItem
+    let imageFrame: CGRect
+    let scale: CGFloat
+
+    func body(content: Content) -> some View {
+        if state.isPickingColor {
+            content
+                .gesture(DragGesture(minimumDistance: 0).onEnded { value in
+                    sample(at: value.location)
+                })
+                .onExitCommand { state.isPickingColor = false }
+        } else {
+            content.onDrag { state.dragProvider(for: item) ?? NSItemProvider() }
+        }
+    }
+
+    private func sample(at point: CGPoint) {
+        guard imageFrame.contains(point), scale > 0 else { return }
+        let x = Int((point.x - imageFrame.minX) / scale)
+        let y = Int((point.y - imageFrame.minY) / scale)
+        state.pickColor(in: item, atX: x, y: y)
     }
 }
 
@@ -265,18 +311,33 @@ struct ControlsBar: View {
     let item: TrimItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Text("Tolerance")
                 Slider(value: $state.tolerance, in: 0...100)
-                    .frame(minWidth: 140, maxWidth: 280)
+                    .frame(minWidth: 120, maxWidth: 220)
                 Text("\(Int(state.tolerance))")
                     .monospacedDigit()
-                    .frame(width: 28, alignment: .trailing)
+                    .frame(width: 26, alignment: .trailing)
                     .foregroundStyle(.secondary)
+                Divider().frame(height: 18)
                 Stepper("Padding: \(state.padding) px", value: $state.padding, in: 0...256)
                     .fixedSize()
+                Divider().frame(height: 18)
+                Picker("Aspect", selection: $state.aspect) {
+                    ForEach(AspectRatio.allCases) { Text($0.label).tag($0) }
+                }
+                .fixedSize()
+                .help("Grow the crop to a fixed aspect ratio")
                 Spacer()
+            }
+
+            HStack(spacing: 12) {
+                BackgroundControls()
+                Divider().frame(height: 18)
+                EdgeToggles()
+                Spacer()
+                ExportOptionsButton()
                 Button("Copy") { state.copySelected() }
                     .help("Copy the trimmed image (⌘C)")
                 Button("Save…") { state.saveSelected() }
@@ -287,6 +348,7 @@ struct ControlsBar: View {
                         .help("Export every image, trimmed, to a folder (⇧⌘S)")
                 }
             }
+
             HStack {
                 summaryText
                     .monospacedDigit()
@@ -309,18 +371,156 @@ struct ControlsBar: View {
         case .pending:
             Text("\(w) × \(h) px — scanning…")
                 .foregroundStyle(.secondary)
-        case .done(nil):
-            Text("\(w) × \(h) px — nothing but background at this tolerance")
-                .foregroundStyle(.orange)
-        case .done(.some):
-            if let crop = state.paddedCropRect(for: item) {
-                if crop == item.fullRect {
+        case .done(let result):
+            if result.rect == nil {
+                Text("\(w) × \(h) px — nothing but background at this tolerance")
+                    .foregroundStyle(.orange)
+            } else if let crop = state.paddedCropRect(for: item),
+                      let out = state.outputSize(for: item) {
+                if crop == item.fullRect && state.exportScale == 1 {
                     Text("\(w) × \(h) px — already tight, no margins to trim")
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("\(w) × \(h) px  →  \(Int(crop.width)) × \(Int(crop.height)) px")
+                    HStack(spacing: 8) {
+                        Text("\(w) × \(h) px  →  \(out.width) × \(out.height) px")
+                        if let insets = state.trimInsets(for: item) {
+                            Text("cut \(insets.top) ↑ \(insets.right) → \(insets.bottom) ↓ \(insets.left) ←")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/// Background source: auto-detect, a fixed color, alpha only, or eyedropped.
+struct BackgroundControls: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Picker("Background", selection: $state.backgroundMode) {
+                ForEach(BackgroundMode.allCases) { Text($0.label).tag($0) }
+            }
+            .fixedSize()
+
+            if state.backgroundMode == .custom {
+                ColorPicker("", selection: colorBinding, supportsOpacity: false)
+                    .labelsHidden()
+                    .help(state.customColor.hex)
+            } else if let detected = state.selectedItem?.analysis.result?.background {
+                Swatch(color: detected.color)
+                    .help("Detected background \(detected.hex)")
+            }
+
+            Button {
+                state.isPickingColor.toggle()
+            } label: {
+                Image(systemName: "eyedropper")
+            }
+            .help("Sample the background color from the image (⌘P)")
+            .background(state.isPickingColor
+                        ? Color.accentColor.opacity(0.25) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 5))
+        }
+    }
+
+    private var colorBinding: Binding<Color> {
+        Binding(
+            get: { state.customColor.color },
+            set: { newValue in
+                if let rgb = RGB(nsColor: NSColor(newValue)) { state.customColor = rgb }
+            })
+    }
+}
+
+struct Swatch: View {
+    let color: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(color)
+            .frame(width: 20, height: 20)
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.secondary.opacity(0.5)))
+    }
+}
+
+/// Which sides Trim is allowed to cut.
+struct EdgeToggles: View {
+    @EnvironmentObject private var state: AppState
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("Edges").fixedSize()
+            toggle(.top, symbol: "arrow.up.to.line", help: "Trim the top edge")
+            toggle(.right, symbol: "arrow.right.to.line", help: "Trim the right edge")
+            toggle(.bottom, symbol: "arrow.down.to.line", help: "Trim the bottom edge")
+            toggle(.left, symbol: "arrow.left.to.line", help: "Trim the left edge")
+        }
+    }
+
+    private func toggle(_ edge: EdgeSet, symbol: String, help: String) -> some View {
+        Toggle(isOn: binding(edge)) {
+            Image(systemName: symbol)
+        }
+        .toggleStyle(.button)
+        .help(help)
+    }
+
+    private func binding(_ edge: EdgeSet) -> Binding<Bool> {
+        Binding(
+            get: { state.trimEdges.contains(edge) },
+            set: { on in
+                if on { state.trimEdges.insert(edge) } else { state.trimEdges.remove(edge) }
+            })
+    }
+}
+
+/// Format, quality, and output scale, tucked into a popover.
+struct ExportOptionsButton: View {
+    @EnvironmentObject private var state: AppState
+    @State private var showing = false
+
+    private static let scales: [Double] = [0.25, 0.5, 1.0, 2.0]
+
+    var body: some View {
+        Button {
+            showing.toggle()
+        } label: {
+            Label("Options", systemImage: "slider.horizontal.3")
+        }
+        .help("Export format, quality, and scale")
+        .popover(isPresented: $showing, arrowEdge: .bottom) {
+            Form {
+                Picker("Format", selection: $state.exportFormat) {
+                    ForEach(ExportFormat.allCases) { Text($0.label).tag($0) }
+                }
+                if isJPEG {
+                    HStack {
+                        Slider(value: $state.jpegQuality, in: 0.3...1.0)
+                        Text("\(Int(state.jpegQuality * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                    .help("JPEG quality")
+                }
+                Picker("Scale", selection: $state.exportScale) {
+                    ForEach(Self.scales, id: \.self) { Text("\(Int($0 * 100))%").tag($0) }
+                }
+                if let out = state.selectedItem.flatMap({ state.outputSize(for: $0) }) {
+                    LabeledContent("Output", value: "\(out.width) × \(out.height) px")
+                }
+                Divider()
+                Button("Reset to defaults") { state.resetSettings() }
+            }
+            .padding(16)
+            .frame(width: 280)
+        }
+    }
+
+    private var isJPEG: Bool {
+        let prefersJPEG = state.selectedItem?.prefersJPEG ?? false
+        return TrimEngine.resolve(state.exportFormat, prefersJPEG: prefersJPEG) == .jpeg
     }
 }
